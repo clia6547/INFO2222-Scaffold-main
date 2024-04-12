@@ -45,5 +45,6 @@ def get_friends(username: str):
     with Session(engine) as session:
         user = session.query(User).filter(User.username == username).first()
         if user:
-            return user.friends_with
+            # Assuming User.friends_with represents the list of friends for a user
+            return [friendship.user1 for friendship in user.friends_with]
         return None

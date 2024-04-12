@@ -26,6 +26,9 @@ def connect():
     room_id = request.cookies.get("room_id")
     if room_id is None or username is None:
         return
+    friends = db.get_friends(username)
+    if friends:
+        emit("friend_list", friends)
     # socket automatically leaves a room on client disconnect
     # so on client connect, the room needs to be rejoined
     join_room(int(room_id))
@@ -117,12 +120,15 @@ def accept_friend_request(receiver_name, sender_name):
     if sender is None or receiver is None:
         return "Unknown user"
     
-    room_id = room.get_room_id(receiver_name)
-    if room_id is not None:
-        # Emit a message to inform the sender that the request has been accepted
-        emit("incoming", (f"{receiver_name} accepted your friend request!", "green"), to=room_id)
-        # Add both users as friends in the database
-        db.insert_friendship(sender_name, receiver_name)
-        db.insert_friendship(receiver_name, sender_name)
-    else:
-        return "User not in a room"
+    # Add both users as friends in the database
+    db.insert_friendship(sender_name, receiver_name)
+    db.insert_friendship(receiver_name, sender_name)
+    
+    # Get updated friend lists for both sender and receiver
+    sender_friends = db.get_friends(sender_name)
+    receiver_friends = db.get_friends(receiver_name)
+    
+    # Emit updated friend lists to the respective users
+    emit("friend_list", sender_friends, to=sender_name)
+    emit("friend_list", receiver_friends, to=receiver_name)
+

@@ -51,8 +51,12 @@
 
 <h1>Messaging App </h1>
 <section id="friends" style="position: absolute; left: 1200px">
-        <p class="text">Friends List</p>
+    <p class="text">Friends List</p>
+    <div id="friendsList">
+        <!-- Friends will be listed here -->
+    </div>
 </section>
+
 
 
 <main>
@@ -216,6 +220,18 @@
         alert(receiver + " accepted your friend request!");
         // You can perform additional actions if needed
     });
+    
+    // Listen for friend list from the server
+    socket.on("friend_list", (friends) => {
+        // Clear the existing friend list
+        $("#friendsList").empty();
+        
+        // Iterate through the friends list and add them to the UI
+        friends.forEach((friend) => {
+            $("#friendsList").append(`<p>${friend}</p>`);
+        });
+});
+
 
 </script>
 {% endblock %}
