@@ -96,7 +96,7 @@
 <script src="/static/js/libs/socket.io.min.js"></script>
 <script>
     let room_id = 0;
-     // Function to send a friend request to the receiver
+    // Function to send a friend request to the receiver
     function sendFriendRequest() {
         let receiver = $("#receiver").val();
 
@@ -109,7 +109,7 @@
             }
         });
     }
-
+    
     
     // when the user presses the "Enter" key inside of the "message box", 
     // the message is sent to the server
@@ -128,6 +128,7 @@
     })
 
     $(document).ready(() => {
+        
         // room_id is undefined if the user hasn't joined a room
         // we early return in this case
         if (Cookies.get("room_id") == undefined) {
@@ -139,6 +140,7 @@
         $("#chat_box").hide();
         $("#input_box").show();
         room_id = parseInt(Cookies.get("room_id"));
+        
     })
     
     // Here's the Socket IO part of the code
@@ -205,6 +207,10 @@
         box.append(child);
     }
     
+
+
+
+
    // Listen for friend requests from the server
     socket.on("friend_request", (sender) => {
         // Display a confirmation dialog for the recipient
@@ -221,17 +227,40 @@
         // You can perform additional actions if needed
     });
     
+
     // Listen for friend list from the server
-    socket.on("friend_list", (friends) => {
-        // Clear the existing friend list
-        $("#friendsList").empty();
-        
-        // Iterate through the friends list and add them to the UI
-        friends.forEach((friend) => {
-            $("#friendsList").append(`<p>${friend}</p>`);
+socket.on("friend_list", (friends) => {
+    // Clear the existing friend list
+    $("#friendsList").empty();
+    
+    // Iterate through the friends list and add them to the UI as buttons
+    friends.forEach((friend) => {
+        // Create a button element for each friend
+        let button = $("<button>").text(friend);
+        button.addClass("friendButton");
+        // Add click event listener to the button
+        button.click(() => {
+            // Emit a "join" event to the server to open a chat with the friend
+            socket.emit("join", username, friend, (res) => {
+                if (typeof res != "number") {
+                    alert(res);
+                    return;
+                }
+                // set the room id variable to the room id returned by the server
+                room_id = res;
+                Cookies.set("room_id", room_id);
+                // Show the input box for chatting
+                $("#chat_box").hide();
+                $("#input_box").show();
+            });
         });
+        // Append the button to the friends list
+        $("#friendsList").append(button);
+    });
 });
 
+    
+    
 
 </script>
 {% endblock %}

@@ -10,7 +10,7 @@ Prisma docs also looks so much better in comparison
 or use SQLite, if you're not into fancy ORMs (but be mindful of Injection attacks :) )
 '''
 
-from sqlalchemy import String, Column, ForeignKey
+from sqlalchemy import String, Column, ForeignKey,Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
 from typing import Dict
@@ -34,6 +34,7 @@ class User(Base):
     
     username = Column(String, primary_key=True)
     password = Column(String)
+    public_key = Column(Text)  # New field to store the public key
     
     # Define a relationship with Friendship table
     friends = relationship("Friendship", foreign_keys=[Friendship.user1], back_populates="user1_rel")
@@ -78,3 +79,14 @@ class Room():
             return None
         return self.dict[user]
     
+class Message(Base):
+    __tablename__ = 'message'
+    id = Column(String, primary_key=True)
+    sender_username = Column(String, ForeignKey('user.username'))
+    recipient_username = Column(String, ForeignKey('user.username'))
+    encrypted_message = Column(Text)  # Stores the encrypted message content
+    hmac = Column(String)  # Stores the HMAC of the encrypted message
+
+    sender = relationship("User", foreign_keys=[sender_username])
+    recipient = relationship("User", foreign_keys=[recipient_username])
+   
