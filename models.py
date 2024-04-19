@@ -15,6 +15,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
 from typing import Dict
 
+
 # data models
 Base = declarative_base()
 

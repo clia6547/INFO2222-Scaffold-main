@@ -154,14 +154,36 @@
 
     // an incoming message arrives, we'll add the message to the message box
     socket.on("incoming", (msg, color="black") => {
-        add_message(msg, color);
-    })
+        const parsedMessage = parseMessage(msg);
+        if (isNotSender(msg)) {
+            if (parsedMessage.isEncrypted) {
+                getPrivateKey().then(privateKey => {
+                    decryptMessage(parsedMessage.content, privateKey).then(decryptedMsg => {
+                        add_message(`${parsedMessage.username}: ${decryptedMsg}`, color);
+                    }).catch(err => {
+                        console.error("Decryption error:", err);
+                    });
+                });
+            } else {
+                // If it's not encrypted, just display the message
+                add_message(parsedMessage.content, color);
+            };
+        }else{
+            
+        };
+    });
     
     // we'll send the message to the server by emitting a "send" event
     function send() {
-        let message = $("#message").val();
+        const message = $("#message").val();
         $("#message").val("");
-        socket.emit("send", username, message, room_id);  
+        add_message(username +": " + message, "black")       
+        getPublicKey($("#receiver").val()).then(publicKey => {
+            encryptMessage(message, publicKey).then(encryptedMsg => {
+                socket.emit("send", username, encryptedMsg, room_id);
+            });
+        });
+
     } 
 
     // we emit a join room event to the server to join a room
@@ -199,16 +221,16 @@
         $("#chat_box").show();
     }
 
+
     // function to add a message to the message box
     // called when an incoming message has reached a client
     function add_message(message, color) {
+        console.log('Display message: ',message)
         let box = $("#message_box");
         let child = $(`<p style="color:${color}; margin: 0px;"></p>`).text(message);
         box.append(child);
     }
     
-
-
 
 
    // Listen for friend requests from the server
@@ -229,38 +251,206 @@
     
 
     // Listen for friend list from the server
-socket.on("friend_list", (friends) => {
-    // Clear the existing friend list
-    $("#friendsList").empty();
-    
-    // Iterate through the friends list and add them to the UI as buttons
-    friends.forEach((friend) => {
-        // Create a button element for each friend
-        let button = $("<button>").text(friend);
-        button.addClass("friendButton");
-        // Add click event listener to the button
-        button.click(() => {
-            // Emit a "join" event to the server to open a chat with the friend
-            socket.emit("join", username, friend, (res) => {
-                if (typeof res != "number") {
-                    alert(res);
-                    return;
-                }
-                // set the room id variable to the room id returned by the server
-                room_id = res;
-                Cookies.set("room_id", room_id);
-                // Show the input box for chatting
-                $("#chat_box").hide();
-                $("#input_box").show();
+    socket.on("friend_list", (friends) => {
+        // Clear the existing friend list
+        $("#friendsList").empty();
+        
+        // Iterate through the friends list and add them to the UI as buttons
+        friends.forEach((friend) => {
+            // Create a button element for each friend
+            let button = $("<button>").text(friend);
+            button.addClass("friendButton");
+            // Add click event listener to the button
+            button.click(() => {
+                // Emit a "join" event to the server to open a chat with the friend
+                socket.emit("join", username, friend, (res) => {
+                    if (typeof res != "number") {
+                        alert(res);
+                        return;
+                    }
+                    // set the room id variable to the room id returned by the server
+                    room_id = res;
+                    Cookies.set("room_id", room_id);
+                    // Show the input box for chatting
+                    $("#chat_box").hide();
+                    $("#input_box").show();
+                });
             });
+            // Append the button to the friends list
+            $("#friendsList").append(button);
         });
-        // Append the button to the friends list
-        $("#friendsList").append(button);
     });
-});
 
-    
-    
+    function encryptMessage(message, publicKey) {
+        const enc = new TextEncoder();
+        const encodedMessage = enc.encode(message);
+        return importPublicKey(publicKey).then(publicKeyObj => {
+            return window.crypto.subtle.encrypt({ name: "RSA-OAEP" }, publicKeyObj, encodedMessage);
+        }).then(encrypted => {
+            return window.btoa(String.fromCharCode.apply(null, new Uint8Array(encrypted)));
+        });
+    }
+
+    function decryptMessage(encrypted, privateKey) {
+        const dec = new TextDecoder("utf-8");
+        let encryptedBuffer;
+        try {
+            encryptedBuffer = Uint8Array.from(atob(encrypted), c => c.charCodeAt(0));
+        } catch (error) {
+            console.error("Error decoding base64:", error);
+            throw new Error("Decoding error: Invalid Base64 string");
+        }
+
+        return window.crypto.subtle.decrypt({ name: "RSA-OAEP" }, privateKey, encryptedBuffer)
+        .then(decrypted => {
+            const result = dec.decode(decrypted);
+            return result;
+        }).catch(error => {
+            console.error("Decryption failed:", error);
+            throw new Error("Decryption failure: " + error.message);
+        });
+    }
+
+
+    function importPublicKey(pem) {
+        const binaryDer = _base64ToArrayBuffer(pem);
+        return window.crypto.subtle.importKey("spki", binaryDer, { name: "RSA-OAEP", hash: "SHA-256" }, true, ["encrypt"]);
+    }
+
+    // Retrieve the private key from IndexedDB
+    async function getPrivateKey() {
+        const db = await openIndexedDB();
+        return new Promise((resolve, reject) => {
+            const transaction = db.transaction(["keys"], "readonly");
+            const store = transaction.objectStore("keys");
+            const request = store.get("privateKey");
+
+            request.onsuccess = async () => {
+                if (request.result) {
+                    try {
+                        // Assume request.result.key contains the JWK
+                        const cryptoKey = await importPrivateKey(request.result.key);
+                        resolve(cryptoKey);  // Now returning a CryptoKey object ready for use
+                    } catch (error) {
+                        console.error("Error importing key:", error);
+                        reject("Error importing key: " + error);
+                    }
+                } else {
+                    console.error("No private key found in IndexedDB");
+                    reject("No private key found");
+                }
+            };
+            request.onerror = function(event) {
+                console.error("Failed to retrieve the private key from DB:", event);
+                reject("Failed to retrieve the private key from DB");
+            };
+        });
+    }
+
+
+
+    // Fetch public key of a user from the server
+    async function getPublicKey(username) {
+        try {
+            const response = await fetch(`/api/get_public_key/${username}`);
+            if (!response.ok) {
+                throw new Error('Failed to fetch public key');
+            }
+            const data = await response.json();
+            return data.publicKey;  // Adjust according to how the public key is sent by the server
+        } catch (error) {
+            console.error('Error fetching public key:', error);
+            alert('Could not retrieve public key for user: ' + username);
+        }
+    }
+
+    // Utility function to convert Base64 to ArrayBuffer
+    function _base64ToArrayBuffer(base64) {
+        const binary_string = window.atob(base64);
+        const len = binary_string.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) {
+            bytes[i] = binary_string.charCodeAt(i);
+        }
+        return bytes.buffer;
+    }
+    function openIndexedDB() {
+        return new Promise((resolve, reject) => {
+            // Open a database named "cryptoKeys"
+            const request = window.indexedDB.open("cryptoKeys", 1);
+
+            request.onerror = function(event) {
+                console.error("Database error: " + event.target.errorCode);
+                reject(event.target.error);
+            };
+
+            request.onsuccess = function(event) {
+                console.log("Database opened successfully");
+                resolve(event.target.result);
+            };
+
+            // Handle database upgrades when needed:
+            request.onupgradeneeded = function(event) {
+                const db = event.target.result;
+
+                // Create an object store called "keys" if it doesn't already exist
+                if (!db.objectStoreNames.contains("keys")) {
+                    db.createObjectStore("keys", { keyPath: "id" });
+                }
+            };
+        });
+    }
+
+    function isBase64(str) {
+        const base64Regex = /^(?:[A-Za-z0-9+\/]{4})*(?:[A-Za-z0-9+\/]{2}==|[A-Za-z0-9+\/]{3}=)?$/;
+        return base64Regex.test(str);
+    }
+
+    function parseMessage(message) {
+        const messageParts = message.split(": ");
+        if (messageParts.length > 1 && isBase64(messageParts[1])) {
+            return {
+                username: messageParts[0],
+                content: messageParts[1],
+                isEncrypted: true
+            };
+        } else {
+            return {
+                content: message,
+                isEncrypted: false
+            };
+        }
+    }
+
+    function importPrivateKey(privateKeyJwk) {
+        return window.crypto.subtle.importKey(
+            "jwk",
+            privateKeyJwk,
+            {
+                name: "RSA-OAEP",
+                hash: {name: "SHA-256"}
+            },
+            true,
+            ["decrypt"]
+        );
+    }
+
+
+    function isNotSender(message) {
+        const messageParts = message.split(": ");
+        if (messageParts.length > 1 ) {
+            checkName = messageParts[0]
+            if (checkName == username){
+                return false;
+            } else {
+                return true;
+            };
+        } else {
+            return true;
+        };
+    };
+
+
 
 </script>
 {% endblock %}

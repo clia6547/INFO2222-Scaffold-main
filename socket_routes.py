@@ -4,7 +4,7 @@ file containing all the routes related to socket.io
 '''
 
 
-from flask_socketio import join_room, emit, leave_room
+from flask_socketio import join_room, emit, leave_room, SocketIO
 from flask import request
 
 try:
@@ -12,9 +12,11 @@ try:
 except ImportError:
     from app import socketio
 
-from models import Room
+from models import Room, User, Message
 
 import db
+from os import urandom
+from sqlalchemy.orm import Session
 
 room = Room()
 
@@ -22,6 +24,7 @@ room = Room()
 # this event is emitted when the io() function is called in JS
 @socketio.on('connect')
 def connect():
+    
     username = request.cookies.get("username")
     room_id = request.cookies.get("room_id")
     if room_id is None or username is None:
@@ -33,6 +36,7 @@ def connect():
     # so on client connect, the room needs to be rejoined
     join_room(int(room_id))
     emit("incoming", (f"{username} has connected", "green"), to=int(room_id))
+    # emit("incoming", (f"message: Hello, this is a test from the server."))
 
 # event when client disconnects
 # quite unreliable use sparingly
