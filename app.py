@@ -14,6 +14,8 @@ from sqlalchemy.orm import Session
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization
 
+import os
+import ssl
 # import logging
 
 # this turns off Flask Logging, uncomment this to turn off Logging
@@ -117,4 +119,13 @@ def get_public_key(username):
 
 
 if __name__ == '__main__':
-    socketio.run(app)
+    cert_file = os.path.join(os.getcwd(), 'localhost.pem')
+    key_file = os.path.join(os.getcwd(), 'localhost-key.pem')
+
+    ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+    ssl_context.load_cert_chain(certfile=cert_file, keyfile=key_file)
+
+    ssl_context.set_ciphers('ECDHE-RSA-AES256-GCM-SHA384')
+    ssl_context.options |= ssl.OP_NO_TLSv1 | ssl.OP_NO_TLSv1_1 | ssl.OP_NO_COMPRESSION | ssl.OP_SINGLE_ECDH_USE
+
+    socketio.run(app, host='127.0.0.1', port=5000, ssl_context=ssl_context)
