@@ -35,6 +35,7 @@ class User(Base):
     
     username = Column(String, primary_key=True)
     password = Column(String)
+    salt = Column(String)
     public_key = Column(Text)  # New field to store the public key
     
     # Define a relationship with Friendship table

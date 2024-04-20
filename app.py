@@ -16,6 +16,9 @@ from cryptography.hazmat.primitives import serialization
 
 import os
 import ssl
+
+import hashlib
+import base64
 # import logging
 
 # this turns off Flask Logging, uncomment this to turn off Logging
@@ -53,8 +56,16 @@ def login_user():
     user =  db.get_user(username)
     if user is None:
         return "Error: User does not exist!"
+    
+    stored_password_hash = user.password
+    salt = user.salt
+    print("stored_password_hash:", stored_password_hash)
+    combined_password = password + salt
+    hashed_password_bytes = hashlib.sha256(combined_password.encode()).digest()
+    hashed_password = base64.b64encode(hashed_password_bytes).decode()
+    print("hashed_password:", hashed_password)
 
-    if user.password != password:
+    if hashed_password != stored_password_hash:
         return "Error: Password does not match!"
     
     # Reset the session for each new login
@@ -80,13 +91,14 @@ def signup_user():
 
     username = request.json.get("username")
     password = request.json.get("password")
+    salt = request.json.get("salt")
     public_key = request.json.get("publicKey")
     if public_key is None:
         print("Public key is missing from the data.")
     # print(f"Received public key for {username}: {public_key}")  # Debug log
 
     if db.get_user(username) is None:
-        db.insert_user(username, password, public_key)
+        db.insert_user(username, password, salt, public_key)
         session['username'] = username  # Set up user session
         return jsonify({"success": True, "url": url_for('home', username=username)})
     else:

@@ -25,10 +25,10 @@ session = Session(bind=engine)
 Base.metadata.create_all(engine)
 
 # inserts a user to the database
-def insert_user(username: str, password: str, public_key: str):
+def insert_user(username: str, password: str, salt: str, public_key: str):
     with Session(engine) as session:
         print(f"Inserting user {username} with public key: {public_key}")
-        user = User(username=username, password=password, public_key=public_key)
+        user = User(username=username, password=password, salt=salt, public_key=public_key)
         session.add(user)
         try:
             session.commit()
